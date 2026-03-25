@@ -1,6 +1,6 @@
 {
   "name": "siyuan-plugins-custompic",
-  "author": "Joe-sundaybox.cc",
+  "author": "4698to",
   "url": "https://github.com/4698to/siyuan-plugins-custompic/",
   "version": "0.1.0",
   "minAppVersion": "3.1.27",
@@ -29,12 +29,12 @@
     "zh_CN": "本插件支持思源配置自建图床，可以轻松上传本地资源文件到个人自建图床，Flask后端实现接受图片上传并返回图片链接。"
   },
   "readme": {
-    "default": "README.md"
+    "default": "README_zh_CN.md"
   },
   "funding": {
     "openCollective": "",
     "patreon": "",
-    "github": "Joe-sundaybox.cc"
+    "github": "4698to/siyuan-plugins-custompic"
     
   },
   "keywords": [

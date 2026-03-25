@@ -14,6 +14,12 @@ import {
 
 import JSZip = require("jszip");
 
+import {
+	pickUniqueMdFileName,
+	processMarkdownContent,
+	safeMdFileBaseName,
+} from "./vuepress-theme-vdoing";
+
 import "./index.scss";
 
 const STORAGE_KEY = "custompic-config";
@@ -108,7 +114,7 @@ export default class CustompicUploader extends Plugin {
 						showMessage("导出失败：内核未返回内容", 5000, "error");
 						return;
 					}
-					const processedContent = await this.processMarkdownContent(res.data, id);
+					const processedContent = await processMarkdownContent(res.data, id);
 					if (processedContent == null || processedContent.content === "") {
 						showMessage("导出失败：没有可写入的正文", 5000, "error");
 						return;
@@ -491,135 +497,16 @@ export default class CustompicUploader extends Plugin {
 		}) as any;
 	  }
 	  
-	/**
-	 * 去掉导出内容开头的 YAML front matter，再前置 buildDocFrontMatter 生成的新 front matter。
-	 * 原先用 .then 拼接但未 await，return 时异步尚未完成，导致下载文件里没有新 front matter。
-	 */
-	private async processMarkdownContent(data: any, doc_id: string): Promise<{content: string, title: string} | null> {
-		const raw = typeof data?.content === "string" ? data.content : "";
-		if (!raw) {
-			return null;
-		}
-		let body = raw.replace(/^---\s*\r?\n[\s\S]*?\r?\n---\s*\r?\n?/, "");
-		const front = await this.buildDocFrontMatter(doc_id);
-		if (!front.front_matter) {
-			return {content: body, title: front.title};
-		}
-		const sep = body.startsWith("\n") || body === "" ? "" : "\n";
-		return {content: `${front.front_matter}${sep}${body}`, title: front.title};
-	}
-	/** 格式化为 `2021-09-13 14:29:53`（本地时区） */
-	private formatLocalDateTime(dt: Date): string {
-		const p = (n: number) => String(n).padStart(2, "0");
-		return `${dt.getFullYear()}-${p(dt.getMonth() + 1)}-${p(dt.getDate())} ${p(dt.getHours())}:${p(dt.getMinutes())}:${p(dt.getSeconds())}`;
-	}
+	
+	
 
-	/** 思源 ial.updated 常见为 14 位 yyyyMMddHHmmss，不能交给 Date 直接解析 */
-	private siyuanUpdatedToIso(updated: string | undefined): string {
-		const s = (updated ?? "").trim();
-		if (/^\d{14}$/.test(s)) {
-			const y = +s.slice(0, 4);
-			const mo = +s.slice(4, 6) - 1;
-			const d = +s.slice(6, 8);
-			const h = +s.slice(8, 10);
-			const mi = +s.slice(10, 12);
-			const se = +s.slice(12, 14);
-			const dt = new Date(y, mo, d, h, mi, se);
-			return Number.isNaN(dt.getTime()) ? this.formatLocalDateTime(new Date()) : this.formatLocalDateTime(dt);
-		}
-		const t = Date.parse(s);
-		if (!Number.isNaN(t)) {
-			return this.formatLocalDateTime(new Date(t));
-		}
-		return this.formatLocalDateTime(new Date());
-	}
 
-	/** 生成合法 YAML 标量（必要时用 JSON 双引号转义） */
-	private yamlQuoteScalar(v: string): string {
-		if (!v) {
-			return '""';
-		}
-		if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(v)) {
-			return JSON.stringify(v);
-		}
-		if (/[\n"#]/.test(v) || v !== v.trim() || /: /.test(v)) {
-			return JSON.stringify(v);
-		}
-		return v;
-	}
 
-	private yamlStringList(key: string, items: string[]): string {
-		if (!items.length) {
-			return `${key}: []\n`;
-		}
-		return `${key}:\n${items.map((x) => `  - ${this.yamlQuoteScalar(x)}`).join("\n")}\n`;
-	}
+	
+	
 
-	/**
-	 * 根据 getDocInfo + 文档路径生成 VuePress 风格 front matter。
-	 * 失败时返回空字符串（调用方需判断）。
-	 */
-	private async buildDocFrontMatter(doc_id: string): Promise<{front_matter: string, title: string}> {
-		const docInfo = await fetchSyncPost("/api/block/getDocInfo", { id:doc_id}) as any;
-		if (docInfo?.code !== 0 || !docInfo?.data) {
-			return {front_matter: "", title: ""};
-		}
-		const data = docInfo.data;
-		const ial = data.ial ?? {};
-		const title = String(data.name ?? ial.title ?? "").trim();
-		const datetimeStr = this.siyuanUpdatedToIso(ial.updated);
-		const permalink = data.rootID || doc_id;
+	
 
-		let fullHPath = "";
-		let pathRes = (await fetchSyncPost("/api/filetree/getFullHPathByID", { id:doc_id })) as any;
-		if (pathRes?.code !== 0) {
-			pathRes = (await fetchSyncPost("/api/filetree/getHPathByID", { id:doc_id })) as any;
-		}
-		if (pathRes?.code === 0 && pathRes.data != null) {
-			fullHPath = typeof pathRes.data === "string" ? pathRes.data : "";
-		}
-
-		const segments = fullHPath.split("/").map((p) => p.trim()).filter(Boolean);
-		const categorySegments = segments.slice(0, -1);
-
-		const tagsRaw = ial.tags;
-		const tags =
-			typeof tagsRaw === "string"
-				? tagsRaw.split(/[\s,，、]+/).map((t) => t.trim()).filter(Boolean)
-				: [];
-
-		const categoriesYaml = this.yamlStringList("categories", categorySegments);
-		const tagsYaml = this.yamlStringList("tags", tags);
-
-		const front_matter = `---
-title: ${this.yamlQuoteScalar(title)}
-date: ${this.yamlQuoteScalar(datetimeStr)}
-permalink: /pages/${permalink}
-${categoriesYaml}${tagsYaml}---
-`;
-		return {front_matter: front_matter, title: title};
-	}
-
-	private safeMdFileBaseName(title: string, id: string): string {
-		const raw = title && title.trim() ? title.trim() : id;
-		const cleaned = raw.replace(/[<>:"/\\|?*\x00-\x1f]/g, "_").replace(/\s+/g, " ").trim();
-		return cleaned || id;
-	}
-
-	private pickUniqueMdFileName(base: string, used: Set<string>): string {
-		let stem = base.slice(0, 180);
-		if (!stem) {
-			stem = "untitled";
-		}
-		let name = `${stem}.md`;
-		let n = 2;
-		while (used.has(name)) {
-			name = `${stem}_${n}.md`;
-			n++;
-		}
-		used.add(name);
-		return name;
-	}
 
 	private async batchExportMdToZip(docIds: string[]): Promise<void> {
 		if (!docIds.length) {
@@ -636,12 +523,12 @@ ${categoriesYaml}${tagsYaml}---
 				if (res?.code !== 0 || !res?.data) {
 					continue;
 				}
-				const proc = await this.processMarkdownContent(res.data, docId);
+				const proc = await processMarkdownContent(res.data, docId);
 				if (!proc?.content) {
 					continue;
 				}
-				const base = this.safeMdFileBaseName(proc.title, docId);
-				const fileName = this.pickUniqueMdFileName(base, usedNames);
+				const base = safeMdFileBaseName(proc.title, docId);
+				const fileName = pickUniqueMdFileName(base, usedNames);
 				zip.file(fileName, proc.content);
 				ok++;
 				showMessage(`正在导出 ${ok}/${docIds.length} …`, -1, "info", "custompic-batch-zip");
