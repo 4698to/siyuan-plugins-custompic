@@ -5,7 +5,7 @@ import {
 	fetchPost,
 	fetchSyncPost,
 	
-	// Menu,
+	Menu,
 	// getFrontend, 
 	// IOperation, 
 	// Dialog, 
@@ -24,6 +24,62 @@ import "./index.scss";
 
 const STORAGE_KEY = "custompic-config";
 
+interface CustompicI18n {
+	[key: string]: string | undefined;
+	// 既有 i18n（在 json 中的键）
+	uploadmanual: string;
+	uploadall: string;
+	uploadsuccess: string;
+	testconnect: string;
+	paperlessAddr: string;
+	paperlessToken: string;
+	connectSuccess: string;
+	connectFail: string;
+	connectTimeout: string;
+	errorWithDetail: string;
+	unknownError: string;
+	failgetassets: string;
+	noinvaildassets: string;
+	uploadSummary: string;
+	failedsearch: string;
+	cannotgetfile: string;
+	uploadFail: string;
+	uploadError: string;
+	docExistsSkip: string;
+	linkReplaced: string;
+	linkReplacedDone: string;
+	linkReplaceFail: string;
+	linkReplaceNoBlock: string;
+	linkReplaceNoMatch: string;
+	networkResource: string;
+	uploading: string;
+	uploadProgress: string;
+	uploadProgressDone: string;
+	exportMdFile: string;
+	uploadImageOnly: string;
+	exportMdFileZip: string;
+
+	// 扩展 i18n（以前通过 as any 访问的键）
+	defaultServerName?: string;
+	allServersDisabled?: string;
+	noServerConfigured?: string;
+	serverNamePlaceholder?: string;
+	serverEnabled?: string;
+	serverDisabledMark?: string;
+	addServer?: string;
+	serverPrefix?: string;
+	removeServer?: string;
+	needOneServer?: string;
+	selectServer?: string;
+	serverDisplayName?: string;
+	serverEnabledTitle?: string;
+	multiServerActions?: string;
+	syncToAllServers?: string;
+	uploadPartialFail?: string;
+	compressToWebpTitle?: string;
+	compressToWebp?: string;
+}
+
 interface ServerEntry {
 	id: string;
 	name: string;
@@ -39,6 +95,8 @@ const DEFAULT_FILE_SUFFIXES =
 	"*.heic, *.avif, *.mp4, *.webm, *.mov, *.mkv, *.avi, *.m4v, *.mpeg, *.mpg, *.wmv, *.flv, *.3gp";
 
 export default class CustompicUploader extends Plugin {
+	// 让 TS 允许直接用 this.i18n.xxx，不再需要 as any
+	declare i18n: CustompicI18n;
 
 	private config: any = {};
 	private uploadedFiles: Set<string> = new Set();
@@ -49,22 +107,29 @@ export default class CustompicUploader extends Plugin {
 	// key: 资源路径（/data/assets/..），value: 命中的 blockId 列表
 	private blockAssetMap: Map<string, Set<string>> = new Map();
 
+	private topBarMenu: Menu | null = null;
 
 	async onload() {
 		await this.loadData(STORAGE_KEY);
 		this.config = this.data[STORAGE_KEY] || {};
 		this.migrateServerConfig();
+		// 默认开启：上传时将图片转为 webp（后端可按 is_compress 关闭）
+		if (typeof (this.config as any).isCompressWebp !== "boolean") {
+			(this.config as any).isCompressWebp = true;
+		}
+		// 添加顶部栏按钮
+		// this.addTopBar({
+		// 	icon: "iconUpload",
+		// 	title: this.i18n.uploadmanual,
+		// 	position: "right",
+		// 	callback: () => this.uploadAll(this.currentPageId)
+		// });
 
-		this.addTopBar({
-			icon: "iconUpload",
-			title: this.i18n.uploadmanual,
-			position: "right",
-			callback: () => this.uploadAll(this.currentPageId)
-		});
+		this.eventBus.on("open-menu-image", this.injectContextMenu_upload_image); //图片右键菜单事件
 
-		this.eventBus.on("open-menu-image", this.injectContextMenu);
-		this.eventBus.on("open-menu-link", this.injectContextMenu); 
-		
+		this.eventBus.on("open-menu-doctree", this.doctreeMenuEventListener); //文档树右键菜单事件
+		this.eventBus.on("click-editortitleicon",this.doctreeMenuEventListener); //文档右上角的 文件 按钮 菜单
+
 		//switch-protyle 是思源（SiYuan）里“编辑器上下文切换”时触发的事件，通常发生在：
 		//切换到另一个文档
 		//同一文档但焦点切到另一个 protyle 实例（如分屏/页签切换）
@@ -80,103 +145,142 @@ export default class CustompicUploader extends Plugin {
 		});
 
 
-		this.eventBus.on("open-menu-doctree", this.doctreeMenuEventListener);
+		
 
 		this.registerSettingUI();
 		// 在插件卸载时清理事件监听器
 		const originalOnunload = this.onunload;
 		this.onunload = async () => {
-			this.eventBus.off("open-menu-doctree", this.doctreeMenuEventListener);
 			if (originalOnunload) {
 				await originalOnunload.call(this);
 			}
 		};
+
+		this.addClickTopBar();
+
 	}
+	onunload() {
+		this.eventBus.off("open-menu-image", this.injectContextMenu_upload_image);
+		this.eventBus.off("open-menu-link", this.injectContextMenu_upload_image); 
+		this.eventBus.off("open-menu-doctree", this.doctreeMenuEventListener);
+		this.eventBus.off("click-editortitleicon", this.doctreeMenuEventListener);
+
+	}
+
+	private ensureDocId(id: unknown, actionLabel: string): string | null {
+		const docId = typeof id === "string" ? id : "";
+		if (!docId) {
+			showMessage(`${actionLabel}：未获取到文档 ID`, 5000, "error");
+			return null;
+		}
+		return docId;
+	}
+
+	private async exportDocAsMdFile(docId: string): Promise<void> {
+		try {
+			const res = await this._exportMdContent(docId);
+			if (res?.code !== 0 || !res?.data) {
+				showMessage("导出失败：内核未返回内容", 5000, "error");
+				return;
+			}
+			const processedContent = await processMarkdownContent(res.data, docId);
+			if (processedContent == null || processedContent.content === "") {
+				showMessage("导出失败：没有可写入的正文", 5000, "error");
+				return;
+			}
+			const blob = new Blob([processedContent.content], {
+				type: "text/markdown;charset=utf-8",
+			});
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement("a");
+			a.href = url;
+			a.download = `${processedContent.title}.md`;
+			document.body.appendChild(a);
+			a.click();
+			setTimeout(() => {
+				document.body.removeChild(a);
+				URL.revokeObjectURL(url);
+			}, 100);
+			showMessage("文件已下载", 3000, "info");
+		} catch (e) {
+			console.error(e);
+			showMessage("导出异常，请查看控制台", 5000, "error");
+		}
+	}
+
+	private async uploadDocAssetsOnly(docId: string): Promise<void> {
+		this.currentPageId = docId;
+		await this.uploadAll(docId);
+	}
+
+	private async exportDocsAsZip(docIds: string[]): Promise<void> {
+		await this.batchExportMdToZip(docIds);
+	}
+
+	private getDocIdsFromMenuEvent(e: any): { singleId: string | null; multiIds: string[] } {
+		const ids: string[] = [];
+		const elements = e?.detail?.elements;
+		if (elements && typeof elements.length === "number") {
+			for (let i = 0; i < elements.length; i++) {
+				const el = elements.item ? elements.item(i) : elements[i];
+				const id = el?.dataset?.nodeId;
+				if (typeof id === "string" && id) {
+					ids.push(id);
+				}
+			}
+		}
+
+		// click-editortitleicon 等事件可能不带 elements；尽量兜底到当前页面
+		const fallback =
+			(e?.detail?.id as unknown) ||
+			(e?.detail?.rootID as unknown) ||
+			(e?.detail?.protyle?.block?.rootID as unknown) ||
+			this.currentPageId;
+
+		const singleFromElements = ids.length === 1 ? ids[0] : null;
+		const singleFromFallback = typeof fallback === "string" && fallback ? fallback : null;
+
+		return {
+			singleId: singleFromElements ?? singleFromFallback,
+			multiIds: ids.length > 1 ? ids : [],
+		};
+	}
+
 	/* 文档树菜单弹出事件监听器 */
 	protected readonly doctreeMenuEventListener = (e: any) => {
 		// this.logger.debug(e);
 		const submenu: any[] = [];
-		switch (e.detail.type) {
-		case "doc": {
-			// 单文档
-			const id = e.detail.elements.item(0)?.dataset?.nodeId;
+		const { singleId, multiIds } = this.getDocIdsFromMenuEvent(e);
 
-			if (id) {
-			submenu.push(
-				{
-				icon: "iconFile",
-				label: "导出md文件",
-				click: async () => {
-					try {
-						// 获取文档信息 md 内容
-					const res = await this._exportMdContent(id);
-					if (res?.code !== 0 || !res?.data) {
-						showMessage("导出失败：内核未返回内容", 5000, "error");
-						return;
-					}
-					const processedContent = await processMarkdownContent(res.data, id);
-					if (processedContent == null || processedContent.content === "") {
-						showMessage("导出失败：没有可写入的正文", 5000, "error");
-						return;
-					}
-					const blob = new Blob([processedContent.content], {
-						type: "text/markdown;charset=utf-8",
-					});
-					const url = URL.createObjectURL(blob);
-					const a = document.createElement("a");
-					a.href = url;
-					a.download = `${processedContent.title}.md`;
-					document.body.appendChild(a);
-					a.click();
-					setTimeout(() => {
-						document.body.removeChild(a);
-						URL.revokeObjectURL(url);
-					}, 100);
-					showMessage("文件已下载", 3000, "info");
-					} catch (e) {
-					console.error(e);
-					showMessage("导出异常，请查看控制台", 5000, "error");
-					}
-				},
-				},
-				{
-				icon: "iconUpload",
-				label: "仅上传图床",
-				click: async () => {
-					// 上传图床
-					this.currentPageId = id;
-					await this.uploadAll(id);
-				},
-				},
-				
-			);
-			}
-			break;
-		}
-		case "docs": {
-			// 多文档
-			const ids: string[] = [];
-			// 遍历所有选中的元素
-			for (let i = 0; i < e.detail.elements.length; i++) {
-			const element = e.detail.elements.item(i);
-			if (element && element.dataset.nodeId) {
-				ids.push(element.dataset.nodeId);
-			}
-			}
-
-			if (ids.length > 0) {
+		if (multiIds.length > 0) {
 			submenu.push({
 				icon: "iconFile",
-				label: "批量导出为ZIP",
+				label: this.i18n.exportMdFileZip,
 				click: async () => {
-				await this.batchExportMdToZip(ids);
+					await this.exportDocsAsZip(multiIds);
 				},
 			});
-			}
-			break;
-		}
-		default:
-			break;
+		} else if (singleId) {
+			submenu.push(
+				{
+					icon: "iconFile",
+					label: this.i18n.exportMdFile,
+					click: async () => {
+						const docId = this.ensureDocId(singleId, this.i18n.exportMdFile);
+						if (!docId) return;
+						await this.exportDocAsMdFile(docId);
+					},
+				},
+				{
+					icon: "iconUpload",
+					label: this.i18n.uploadImageOnly,
+					click: async () => {
+						const docId = this.ensureDocId(singleId, this.i18n.uploadImageOnly);
+						if (!docId) return;
+						await this.uploadDocAssetsOnly(docId);
+					},
+				},
+			);
 		}
 
 		if (submenu.length > 0) {
@@ -187,6 +291,58 @@ export default class CustompicUploader extends Plugin {
 		});
 		}
 	}
+
+	private async addClickTopBar() {
+		const topBar = this.addTopBar({
+		icon: "iconUpload",
+		title: this.i18n.uploadmanual,
+		position: "right",
+		callback: async () => {
+			
+			let rect = topBar.getBoundingClientRect();
+			// 如果被隐藏，则使用更多按钮
+			if (rect.width === 0) {
+				rect = document.querySelector("#barMore").getBoundingClientRect();
+			}
+			if (rect.width === 0) {
+				rect = document.querySelector("#barPlugins").getBoundingClientRect();
+			}
+			this.addMenu(rect);
+			
+		},
+		});
+	}
+	public async addMenu(rect: any) {
+		this.topBarMenu = new Menu("imageConverter", () => {
+		});
+		this.topBarMenu.addItem({
+			icon: "iconFile",
+			label: this.i18n.exportMdFile,
+		  	click: async () => {
+				const docId = this.ensureDocId(this.currentPageId, this.i18n.exportMdFile);
+				if (!docId) return;
+				await this.exportDocAsMdFile(docId);
+		  	}
+		});
+	
+		this.topBarMenu.addItem({
+			icon: "iconUpload",
+			label: this.i18n.uploadImageOnly,
+		  	click: async () => {
+				const docId = this.ensureDocId(this.currentPageId, this.i18n.uploadImageOnly);
+				if (!docId) return;
+				await this.uploadDocAssetsOnly(docId);
+		  	}
+		});
+		
+		this.topBarMenu.open({
+			x: rect.x,
+			y: rect.y,
+			isLeft: false
+		});
+		
+	}
+
 	private newServerId(): string {
 		return `srv-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 	}
@@ -194,7 +350,7 @@ export default class CustompicUploader extends Plugin {
 	/** 从旧版单 baseURL 迁移为多服务器列表 */
 	private migrateServerConfig(): void {
 		const c = this.config;
-		const defaultName = (this.i18n as any)?.defaultServerName ?? "默认";
+		const defaultName = this.i18n.defaultServerName ?? "默认";
 		if (!Array.isArray(c.servers) || c.servers.length === 0) {
 			const id = this.newServerId();
 			c.servers = [
@@ -266,19 +422,16 @@ export default class CustompicUploader extends Plugin {
 		const hasEnabledWithUrl = all.some((s) => this.isServerUploadEnabled(s) && this.normBaseURL(s));
 		if (all.length > 0 && hasUrl && !hasEnabledWithUrl) {
 			return (
-				(this.i18n as any).allServersDisabled ??
+				this.i18n.allServersDisabled ??
 				"没有已启用的服务器：请在设置中为至少一台服务器勾选「启用」。"
 			);
 		}
 		return (
-			(this.i18n as any).noServerConfigured ?? "请先在设置中填写至少一个服务器地址"
+			this.i18n.noServerConfigured ?? "请先在设置中填写至少一个服务器地址"
 		);
 	}
 
-	onunload() {
-		this.eventBus.off("open-menu-image", this.injectContextMenu);
-		this.eventBus.off("open-menu-link", this.injectContextMenu); 
-	}
+	
 
 	private registerSettingUI() {
 		this.setting = new Setting({
@@ -290,7 +443,7 @@ export default class CustompicUploader extends Plugin {
 
 		const nameInput = document.createElement("input");
 		nameInput.className = "b3-text-field fn__block custompic-setting-input";
-		nameInput.placeholder = (this.i18n as any).serverNamePlaceholder ?? "备注名";
+		nameInput.placeholder = this.i18n.serverNamePlaceholder ?? "备注名";
 		const baseInput = document.createElement("input");
 		baseInput.className = "b3-text-field fn__block custompic-setting-input";
 		baseInput.placeholder = "http://your-server-url";
@@ -303,7 +456,7 @@ export default class CustompicUploader extends Plugin {
 		syncAll.id = "custompic-sync-all";
 		const syncLabel = document.createElement("label");
 		syncLabel.htmlFor = "custompic-sync-all";
-		syncLabel.textContent = (this.i18n as any).syncToAllServers ?? "同步上传到全部已配置服务器";
+		syncLabel.textContent = this.i18n.syncToAllServers ;
 		const syncWrap = document.createElement("div");
 		syncWrap.className = "fn__flex";
 		syncWrap.append(syncAll, syncLabel);
@@ -314,14 +467,14 @@ export default class CustompicUploader extends Plugin {
 		const enabledLabel = document.createElement("label");
 		enabledLabel.htmlFor = "custompic-server-enabled";
 		enabledLabel.textContent =
-			(this.i18n as any).serverEnabled ?? "启用此服务器（参与上传）";
+			this.i18n.serverEnabled ?? "启用此服务器（参与上传）";
 		const enabledWrap = document.createElement("div");
 		enabledWrap.className = "fn__flex";
 		enabledWrap.append(enabledInput, enabledLabel);
 
 		const formatOptionLabel = (s: ServerEntry): string => {
 			const base = s.name || s.baseURL || s.id;
-			const mark = (this.i18n as any).serverDisabledMark ?? "已禁用";
+			const mark = this.i18n.serverDisabledMark ?? "已禁用";
 			return s.enabled === false ? `${base}（${mark}）` : base;
 		};
 
@@ -407,13 +560,28 @@ export default class CustompicUploader extends Plugin {
 			this.config.syncToAllServers = syncAll.checked;
 		});
 
+		const compressWebp = document.createElement("input");
+		compressWebp.type = "checkbox";
+		compressWebp.id = "custompic-compress-webp";
+		const compressWebpLabel = document.createElement("label");
+		compressWebpLabel.htmlFor = "custompic-compress-webp";
+		compressWebpLabel.textContent =
+			this.i18n.compressToWebp ?? "图片压缩并转为 WebP（推荐）";
+		const compressWebpWrap = document.createElement("div");
+		compressWebpWrap.className = "fn__flex";
+		compressWebpWrap.append(compressWebp, compressWebpLabel);
+		compressWebp.checked = (this.config as any).isCompressWebp !== false;
+		compressWebp.addEventListener("change", () => {
+			(this.config as any).isCompressWebp = compressWebp.checked;
+		});
+
 		const addBtn = document.createElement("button");
 		addBtn.className = "b3-button";
-		addBtn.textContent = (this.i18n as any).addServer ?? "添加服务器";
+		addBtn.textContent = this.i18n.addServer ?? "添加服务器";
 		addBtn.onclick = () => {
 			const s: ServerEntry = {
 				id: this.newServerId(),
-				name: `${(this.i18n as any).serverPrefix ?? "服务器"} ${this.getServers().length + 1}`,
+				name: `${this.i18n.serverPrefix ?? "服务器"} ${this.getServers().length + 1}`,
 				baseURL: "",
 				authHeader: "",
 				enabled: true,
@@ -425,10 +593,10 @@ export default class CustompicUploader extends Plugin {
 
 		const delBtn = document.createElement("button");
 		delBtn.className = "b3-button";
-		delBtn.textContent = (this.i18n as any).removeServer ?? "删除当前服务器";
+		delBtn.textContent = this.i18n.removeServer ?? "删除当前服务器";
 		delBtn.onclick = () => {
 			if (this.getServers().length <= 1) {
-				showMessage((this.i18n as any).needOneServer ?? "至少保留一个服务器配置", 4000, "info");
+				showMessage(this.i18n.needOneServer ?? "至少保留一个服务器配置", 4000, "info");
 				return;
 			}
 			const id = this.config.currentServerId;
@@ -459,18 +627,22 @@ export default class CustompicUploader extends Plugin {
 		};
 
 		this.setting.addItem({
-			title: (this.i18n as any).selectServer ?? "当前服务器",
+			title: this.i18n.selectServer ?? "当前服务器",
 			createActionElement: () => serverSelect,
 		});
-		this.setting.addItem({ title: (this.i18n as any).serverDisplayName ?? "显示名称", createActionElement: () => nameInput });
+		this.setting.addItem({ title: this.i18n.serverDisplayName ?? "显示名称", createActionElement: () => nameInput });
 		this.setting.addItem({
-			title: (this.i18n as any).serverEnabledTitle ?? "启用",
+			title: this.i18n.serverEnabledTitle ?? "启用",
 			createActionElement: () => enabledWrap,
 		});
 		this.setting.addItem({ title: this.i18n.paperlessAddr, createActionElement: () => baseInput });
 		this.setting.addItem({ title: this.i18n.paperlessToken, createActionElement: () => authInput });
-		this.setting.addItem({ title: (this.i18n as any).multiServerActions ?? "列表", createActionElement: () => btnRow });
-		this.setting.addItem({ title: (this.i18n as any).syncToAllServers ?? "同步到全部", createActionElement: () => syncWrap });
+		this.setting.addItem({ title: this.i18n.multiServerActions ?? "列表", createActionElement: () => btnRow });
+		this.setting.addItem({ title: this.i18n.syncToAllServers ?? "同步到全部", createActionElement: () => syncWrap });
+		this.setting.addItem({
+			title: this.i18n.compressToWebpTitle ?? "图片压缩",
+			createActionElement: () => compressWebpWrap,
+		});
 		this.setting.addItem({ title: this.i18n.testconnect, actionElement: testBtn });
 
 		this.supportedSuffixes = this.parseSuffixes(DEFAULT_FILE_SUFFIXES);
@@ -497,16 +669,6 @@ export default class CustompicUploader extends Plugin {
 		}) as any;
 	  }
 	  
-	
-	
-
-
-
-	
-	
-
-	
-
 
 	private async batchExportMdToZip(docIds: string[]): Promise<void> {
 		if (!docIds.length) {
@@ -864,7 +1026,7 @@ export default class CustompicUploader extends Plugin {
 		return refs;
 	}
 
-	private injectContextMenu = ({ detail }: any) => {
+	private injectContextMenu_upload_image = ({ detail }: any) => {
 		const el = detail.element;
 		let filePath = "";
 
@@ -1231,6 +1393,8 @@ export default class CustompicUploader extends Plugin {
 				formData.append("title", name);
 				formData.append("document", blob, name);
 				formData.append("path", path);
+				// 让后端决定是否将图片压缩并转为 webp
+				formData.append("is_compress", (this.config as any).isCompressWebp === false ? "0" : "1");
 
 				try {
 					const { ok, body } = await this.uploadWithProgress(
@@ -1268,7 +1432,7 @@ export default class CustompicUploader extends Plugin {
 
 			if (this.config.syncToAllServers && failedLabels.length > 0) {
 				showMessage(
-					((this.i18n as any).uploadPartialFail ?? "部分服务器上传失败：${servers}").replace(
+					(this.i18n.uploadPartialFail ?? "部分服务器上传失败：${servers}").replace(
 						"${servers}",
 						failedLabels.join(", "),
 					),

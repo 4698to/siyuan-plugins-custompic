@@ -14,6 +14,8 @@ from pathlib import Path
 from flask import Blueprint, current_app, jsonify, request, send_file
 from werkzeug.utils import secure_filename
 
+from media_utils import compress_image_to_webp
+
 bp = Blueprint("siyuan_paperless_local", __name__)
 
 API_KEY = os.environ.get("API_KEY")
@@ -160,6 +162,14 @@ def post_document():
     ext = Path(orig).suffix
 
     _path = (request.form.get("path") or "").strip()
+
+    # 默认压缩；仅当显式传入 false/0/no/n/off 时关闭
+    raw_is_compress = request.form.get("is_compress")
+    if raw_is_compress is None:
+        is_compress = True
+    else:
+        v = str(raw_is_compress).strip().lower()
+        is_compress = v not in {"false", "0", "no", "n", "off"}
     doc_id = str(uuid.uuid4())
 
     if _path:
@@ -181,7 +191,12 @@ def post_document():
 
     file_path.parent.mkdir(parents=True, exist_ok=True)
     f.save(file_path)
-
+    # 新增 ffmpeg 压缩图片，.gif , .png , .jpg , .jpeg , 都转为 webp
+    if is_compress and ext.lower() in [".gif", ".png", ".jpg", ".jpeg"]:
+        new_path = compress_image_to_webp(file_path)
+        if isinstance(new_path, Path) and new_path != file_path:
+            file_path = new_path
+            rel = rel.with_suffix(file_path.suffix)
     return jsonify(
         {
             "success": True,

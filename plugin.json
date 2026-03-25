@@ -2,7 +2,7 @@
   "name": "siyuan-plugins-custompic",
   "author": "4698to",
   "url": "https://github.com/4698to/siyuan-plugins-custompic/",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "minAppVersion": "3.1.27",
   "backends": [
     "windows",
@@ -41,6 +41,8 @@
     "CustomPic",
     "Image Bed",
     "Image Bed Support",
-    "图床"
+    "图床",
+    "转webp",
+    "压缩图片"
   ]
 }

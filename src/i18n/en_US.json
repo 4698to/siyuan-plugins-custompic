@@ -31,5 +31,11 @@
   "serverEnabled": "Enable this server (include in uploads)",
   "serverDisabledMark": "disabled",
   "noServerConfigured": "Add at least one server URL in settings",
-  "allServersDisabled": "No enabled servers: enable at least one server for uploads."
+  "allServersDisabled": "No enabled servers: enable at least one server for uploads.",
+  "compressToWebpTitle": "Image compression",
+  "compressToWebp": "Compress images and convert to WebP (recommended)",
+  "exportMdFile": "Export md file",
+  "uploadImageOnly": "Upload image only",
+  "exportMdFileZip": "Batch export to ZIP",
+  "syncToAllServers": "Sync upload to enabled servers"
 }

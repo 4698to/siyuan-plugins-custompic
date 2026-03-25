@@ -31,5 +31,11 @@
   "serverEnabled": "启用此服务器（参与上传）",
   "serverDisabledMark": "已禁用",
   "noServerConfigured": "请先在设置中填写至少一个服务器地址",
-  "allServersDisabled": "没有已启用的服务器：请至少勾选一台服务器的「启用」。"
+  "allServersDisabled": "没有已启用的服务器：请至少勾选一台服务器的「启用」。",
+  "compressToWebpTitle": "图片压缩",
+  "compressToWebp": "图片压缩并转为 WebP（推荐）",
+  "exportMdFile": "导出md文件",
+  "uploadImageOnly": "仅上传图床",
+  "exportMdFileZip": "批量导出为ZIP",
+  "syncToAllServers": "同步上传到已启用服务器"
 }
