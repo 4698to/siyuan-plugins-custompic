@@ -98,6 +98,41 @@ ${categoriesYaml}${tagsYaml}---
 }
 
 /**
+ * 根据 传入的md内容，，修改 <video>内容 。
+ * <video src="" controls="controls"></video>
+ * 改成：
+ * <video src="" controls="controls" style="width: 860px;"></video>
+ * 失败时返回空字符串（调用方需判断）。
+ */
+export async function buildDocVideoContent(body: string): Promise<string> {
+	try {
+		if (!body) {
+			return "";
+		}
+		const newBody = body.replace(/<video\b[^>]*>/gi, (tag) => {
+			// 已含 style：补充/覆盖 width: 860px；
+			if (/\bstyle\s*=/i.test(tag)) {
+				return tag.replace(
+					/\bstyle\s*=\s*(["'])([\s\S]*?)\1/i,
+					(_m, quote: string, styleValue: string) => {
+						const withoutWidth = styleValue
+							.replace(/(?:^|;)\s*width\s*:[^;]*;?/gi, "")
+							.trim()
+							.replace(/;+\s*$/g, "");
+						const merged = withoutWidth ? `${withoutWidth}; width: 860px;` : "width: 860px;";
+						return `style=${quote}${merged}${quote}`;
+					},
+				);
+			}
+			// 未含 style：直接添加
+			return tag.replace(/>$/, ' style="width: 860px;">');
+		});
+		return newBody;
+	} catch {
+		return "";
+	}
+}
+/**
  * 去掉导出内容开头的 YAML front matter，再前置 buildDocFrontMatter 生成的新 front matter。
  */
 export async function processMarkdownContent(data: any, docId: string): Promise<ProcessedMarkdownResult> {
@@ -110,8 +145,10 @@ export async function processMarkdownContent(data: any, docId: string): Promise<
 	if (!front.front_matter) {
 		return { content: body, title: front.title };
 	}
-	const sep = body.startsWith("\n") || body === "" ? "" : "\n";
-	return { content: `${front.front_matter}${sep}${body}`, title: front.title };
+	const newBody = await buildDocVideoContent(body);
+	const finalBody = newBody || body;
+	const sep = finalBody.startsWith("\n") || finalBody === "" ? "" : "\n";
+	return { content: `${front.front_matter}${sep}${finalBody}`, title: front.title };
 }
 
 export function safeMdFileBaseName(title: string, id: string): string {
