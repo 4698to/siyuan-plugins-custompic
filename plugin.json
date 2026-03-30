@@ -2,23 +2,13 @@
   "name": "siyuan-plugins-custompic",
   "author": "4698to",
   "url": "https://github.com/4698to/siyuan-plugins-custompic/",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "minAppVersion": "3.1.27",
   "backends": [
-    "windows",
-    "linux",
-    "darwin",
-    "ios",
-    "android",
-    "harmony",
-    "docker"
+    "all"
   ],
   "frontends": [
-    "desktop",
-    "mobile",
-    "browser-desktop",
-    "browser-mobile",
-    "desktop-window"
+    "all"
   ],
   "displayName": {
     "default": "Siyuan CustomPic",
@@ -29,14 +19,10 @@
     "zh_CN": "本插件支持思源配置自建图床，可以轻松上传本地资源文件到个人自建图床，Flask后端实现接受图片上传并返回图片链接。"
   },
   "readme": {
-    "default": "README_zh_CN.md"
+    "default": "README.md",
+    "zh_CN": "README_zh_CN.md"
   },
-  "funding": {
-    "openCollective": "",
-    "patreon": "",
-    "github": "4698to/siyuan-plugins-custompic"
-    
-  },
+  
   "keywords": [
     "CustomPic",
     "Image Bed",

@@ -24,62 +24,6 @@ import "./index.scss";
 
 const STORAGE_KEY = "custompic-config";
 
-interface CustompicI18n {
-	[key: string]: string | undefined;
-	// 既有 i18n（在 json 中的键）
-	uploadmanual: string;
-	uploadall: string;
-	uploadsuccess: string;
-	testconnect: string;
-	paperlessAddr: string;
-	paperlessToken: string;
-	connectSuccess: string;
-	connectFail: string;
-	connectTimeout: string;
-	errorWithDetail: string;
-	unknownError: string;
-	failgetassets: string;
-	noinvaildassets: string;
-	uploadSummary: string;
-	failedsearch: string;
-	cannotgetfile: string;
-	uploadFail: string;
-	uploadError: string;
-	docExistsSkip: string;
-	linkReplaced: string;
-	linkReplacedDone: string;
-	linkReplaceFail: string;
-	linkReplaceNoBlock: string;
-	linkReplaceNoMatch: string;
-	networkResource: string;
-	uploading: string;
-	uploadProgress: string;
-	uploadProgressDone: string;
-	exportMdFile: string;
-	uploadImageOnly: string;
-	exportMdFileZip: string;
-
-	// 扩展 i18n（以前通过 as any 访问的键）
-	defaultServerName?: string;
-	allServersDisabled?: string;
-	noServerConfigured?: string;
-	serverNamePlaceholder?: string;
-	serverEnabled?: string;
-	serverDisabledMark?: string;
-	addServer?: string;
-	serverPrefix?: string;
-	removeServer?: string;
-	needOneServer?: string;
-	selectServer?: string;
-	serverDisplayName?: string;
-	serverEnabledTitle?: string;
-	multiServerActions?: string;
-	syncToAllServers?: string;
-	uploadPartialFail?: string;
-	compressToWebpTitle?: string;
-	compressToWebp?: string;
-}
-
 interface ServerEntry {
 	id: string;
 	name: string;
@@ -96,7 +40,7 @@ const DEFAULT_FILE_SUFFIXES =
 
 export default class CustompicUploader extends Plugin {
 	// 让 TS 允许直接用 this.i18n.xxx，不再需要 as any
-	declare i18n: CustompicI18n;
+	//declare i18n: CustompicI18n;
 
 	private config: any = {};
 	private uploadedFiles: Set<string> = new Set();
@@ -116,6 +60,9 @@ export default class CustompicUploader extends Plugin {
 		// 默认开启：上传时将图片转为 webp（后端可按 is_compress 关闭）
 		if (typeof (this.config as any).isCompressWebp !== "boolean") {
 			(this.config as any).isCompressWebp = true;
+		}
+		if (typeof (this.config as any).deleteLocalAfterReplace !== "boolean") {
+			(this.config as any).deleteLocalAfterReplace = false;
 		}
 		// 添加顶部栏按钮
 		// this.addTopBar({
@@ -166,7 +113,12 @@ export default class CustompicUploader extends Plugin {
 		this.eventBus.off("click-editortitleicon", this.doctreeMenuEventListener);
 
 	}
-
+	/** 卸载插件时调用 */
+	uninstall() {
+		this.removeData(STORAGE_KEY);
+		this.topBarMenu?.close();
+		this.topBarMenu = null;
+	}
 	private ensureDocId(id: unknown, actionLabel: string): string | null {
 		const docId = typeof id === "string" ? id : "";
 		if (!docId) {
@@ -575,6 +527,21 @@ export default class CustompicUploader extends Plugin {
 			(this.config as any).isCompressWebp = compressWebp.checked;
 		});
 
+		const deleteLocalAfterReplace = document.createElement("input");
+		deleteLocalAfterReplace.type = "checkbox";
+		deleteLocalAfterReplace.id = "custompic-delete-local-after-replace";
+		const deleteLocalAfterReplaceLabel = document.createElement("label");
+		deleteLocalAfterReplaceLabel.htmlFor = "custompic-delete-local-after-replace";
+		deleteLocalAfterReplaceLabel.textContent =
+			this.i18n.deleteLocalAfterReplace ?? "上传并替换为网络图片后，删除本地资源";
+		const deleteLocalAfterReplaceWrap = document.createElement("div");
+		deleteLocalAfterReplaceWrap.className = "fn__flex";
+		deleteLocalAfterReplaceWrap.append(deleteLocalAfterReplace, deleteLocalAfterReplaceLabel);
+		deleteLocalAfterReplace.checked = (this.config as any).deleteLocalAfterReplace === true;
+		deleteLocalAfterReplace.addEventListener("change", () => {
+			(this.config as any).deleteLocalAfterReplace = deleteLocalAfterReplace.checked;
+		});
+
 		const addBtn = document.createElement("button");
 		addBtn.className = "b3-button";
 		addBtn.textContent = this.i18n.addServer ?? "添加服务器";
@@ -642,6 +609,10 @@ export default class CustompicUploader extends Plugin {
 		this.setting.addItem({
 			title: this.i18n.compressToWebpTitle ?? "图片压缩",
 			createActionElement: () => compressWebpWrap,
+		});
+		this.setting.addItem({
+			title: this.i18n.deleteLocalAfterReplaceTitle ?? "上传后清理",
+			createActionElement: () => deleteLocalAfterReplaceWrap,
 		});
 		this.setting.addItem({ title: this.i18n.testconnect, actionElement: testBtn });
 
@@ -908,8 +879,15 @@ export default class CustompicUploader extends Plugin {
 					if (publicUrl) {
 						const blockIds = this.blockAssetMap.get(path);
 						if (blockIds && blockIds.size > 0) {
+							let replacedAny = false;
+							let replacedAll = true;
 							for (const blockId of blockIds) {
-								await this.replaceBlockAssetWithUrlById(blockId, path, name, publicUrl, false);
+								const replaced = await this.replaceBlockAssetWithUrlById(blockId, path, name, publicUrl, false);
+								replacedAny = replacedAny || replaced;
+								replacedAll = replacedAll && replaced;
+							}
+							if ((this.config as any).deleteLocalAfterReplace === true && replacedAny && replacedAll) {
+								await this.removeLocalAsset(uploadPath);
 							}
 						}
 					}
@@ -1201,6 +1179,16 @@ export default class CustompicUploader extends Plugin {
 		return `${text.slice(0, maxLen - 1)}…`;
 	}
 
+	private async removeLocalAsset(uploadPath: string): Promise<boolean> {
+		try {
+			const res = await fetchSyncPost("/api/file/removeFile", { path: uploadPath }) as any;
+			return res?.code === 0;
+		} catch (e) {
+			console.warn("removeLocalAsset failed", uploadPath, e);
+			return false;
+		}
+	}
+
 	/**
 	 * 按 blockId 将块中的资源路径替换为公网地址（供 uploadAll 批量处理）。
 	 */
@@ -1447,7 +1435,10 @@ export default class CustompicUploader extends Plugin {
 			}
 
 			if (opts?.menuElement && opts?.assetSrc && finalUrl) {
-				await this.replaceEditorAssetWithUrl(opts.menuElement, opts.assetSrc, name, finalUrl);
+				const replaced = await this.replaceEditorAssetWithUrl(opts.menuElement, opts.assetSrc, name, finalUrl);
+				if ((this.config as any).deleteLocalAfterReplace === true && replaced) {
+					await this.removeLocalAsset(path);
+				}
 			}
 			return true;
 		} catch (e) {

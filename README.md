@@ -2,7 +2,7 @@
 
 ## Introduction
 
-[中文](/README_zh_CN.md)
+[中文](https://github.com/4698to/siyuan-plugins-custompic/blob/main/README.md)
 
 This is an image hosting plugin for SiYuan Note:
 
@@ -18,7 +18,7 @@ This is an image hosting plugin for SiYuan Note:
 4. Click "Test Connection" to verify reachability.
 5. In the editor, right-click an asset and run "Upload to CustomPic".
 
-![Plugin Settings Screenshot](./img/image.png)
+![Plugin Settings Screenshot](https://github.com/4698to/siyuan-plugins-custompic/blob/main/img/image.png)
 
 By default, upload scope includes common image and video formats (`jpg/png/webp/gif/mp4/mov/mkv`, etc.).
 
@@ -33,7 +33,7 @@ By default, upload scope includes common image and video formats (`jpg/png/webp/
 
 The **server address (`baseURL`)** configured in plugin settings determines where requests go:
 
-- If it points to the built-in **Flask backend** (`backend/`, see [backend/README.md](./backend/README.md)), the API contract below applies.
+- If it points to the built-in **Flask backend** (`backend/`, see [backend/README.md](https://github.com/4698to/siyuan-plugins-custompic/blob/main/backend/README.md)), the API contract below applies.
 - All paths below are relative to `baseURL`. For example, if `baseURL` is `http://192.168.1.2:5000`, full URLs are `http://192.168.1.2:5000/api/...`.
 
 ### Authentication
@@ -147,7 +147,7 @@ Flask app already allows CORS on `/api/*` for browser-side access from SiYuan; d
 
 ### More Deployment Details
 
-For env vars, bind address, firewall, and directory layout, see **[backend/README.md](./backend/README.md)**.
+For env vars, bind address, firewall, and directory layout, see **[backend/README.md](https://github.com/4698to/siyuan-plugins-custompic/blob/main/backend/README.md)**.
 
 This project is adapted from [Jasaxion/siyuan-paperless](https://github.com/Jasaxion/siyuan-paperless/).
 
