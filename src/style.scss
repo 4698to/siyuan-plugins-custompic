@@ -1,0 +1,6 @@
+/* 插件设置里地址、Token 等输入框：占满行宽并保证最小可视宽度 */
+.custompic-setting-input {
+    min-width: min(100%, 32rem);
+    max-width: 100%;
+    box-sizing: border-box;
+  }

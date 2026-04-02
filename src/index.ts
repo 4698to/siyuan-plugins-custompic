@@ -20,7 +20,7 @@ import {
 	safeMdFileBaseName,
 } from "./vuepress-theme-vdoing";
 
-import "./index.scss";
+import "./style.scss";
 
 const STORAGE_KEY = "custompic-config";
 
@@ -111,13 +111,12 @@ export default class CustompicUploader extends Plugin {
 		this.eventBus.off("open-menu-link", this.injectContextMenu_upload_image); 
 		this.eventBus.off("open-menu-doctree", this.doctreeMenuEventListener);
 		this.eventBus.off("click-editortitleicon", this.doctreeMenuEventListener);
-
+		this.topBarMenu?.close();
+		this.topBarMenu = null;
 	}
 	/** 卸载插件时调用 */
 	uninstall() {
 		this.removeData(STORAGE_KEY);
-		this.topBarMenu?.close();
-		this.topBarMenu = null;
 	}
 	private ensureDocId(id: unknown, actionLabel: string): string | null {
 		const docId = typeof id === "string" ? id : "";

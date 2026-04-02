@@ -11,8 +11,8 @@
     "all"
   ],
   "displayName": {
-    "default": "Siyuan CustomPic",
-    "zh_CN": "思源自建图床支持"
+    "default": "CustomPic",
+    "zh_CN": "自建图床支持"
   },
   "description": {
     "default": "This plugin supports SiYuan configuration of self-built image bed, allowing easy upload of local resource files to personal self-built image bed, and Flask backend implements accepting image upload and returning image link.",
