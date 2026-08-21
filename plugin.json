@@ -2,7 +2,7 @@
   "name": "siyuan-plugins-custompic",
   "author": "4698to",
   "url": "https://github.com/4698to/siyuan-plugins-custompic",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "minAppVersion": "3.1.27",
   "backends": [
     "all"

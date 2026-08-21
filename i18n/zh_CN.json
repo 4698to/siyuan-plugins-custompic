@@ -35,7 +35,7 @@
   "compressToWebpTitle": "图片压缩",
   "compressToWebp": "转WebP（推荐）",
   "deleteLocalAfterReplaceTitle": "上传后清理",
-  "deleteLocalAfterReplace": "上传并替换为网络图片后，删除本地资源",
+  "deleteLocalAfterReplace": "删除本地资源",
   "exportMdFile": "导出md文件",
   "uploadImageOnly": "仅上传图床",
   "exportMdFileZip": "批量导出为ZIP",

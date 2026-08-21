@@ -29,6 +29,49 @@ By default, upload scope includes common image and video formats (`jpg/png/webp/
 3. Optionally replace asset paths in current block with server direct URLs after successful upload.
 4. Complete Flask backend API docs for custom backend integration.
 
+## Markdown Export (vuepress-theme-vdoing)
+
+When exporting `.md`, if the first code block in the document is a SiYuan-style front matter (content starts and ends with `---`), the code fences are removed and the front matter is moved to the top of the document, then merged with the auto-generated front matter:
+
+| Field | Source |
+| --- | --- |
+| `title` / `date` | auto-generated values |
+| `permalink` | value from the code block (falls back to auto-generated) |
+| `categories` / `tags` | merged and deduplicated |
+| other fields | preserved as-is from the code block (nested structures like `author` are kept) |
+
+For example, if the document starts with:
+
+````markdown
+```yaml
+---
+title: Manual Title
+permalink: /pages/manual/
+categories:
+  - Manual Category
+author:
+  name: 99u:199505
+  link: https://sundaybox.cc/
+---
+```
+````
+
+the exported front matter becomes:
+
+````markdown
+---
+title: <Document Title>
+date: "2021-09-13 14:29:53"
+permalink: /pages/manual/
+categories:
+  - Manual Category
+  - <Auto Category>
+author:
+  name: 99u:199505
+  link: https://sundaybox.cc/
+---
+````
+
 ## API Documentation
 
 The **server address (`baseURL`)** configured in plugin settings determines where requests go:

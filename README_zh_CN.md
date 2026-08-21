@@ -29,6 +29,49 @@
 3. 上传成功后可将当前块中的资源路径替换为服务端直链；
 4. 提供完整  Flask 后端 API 文档，便于自定义后端对接。
 
+## Markdown 导出（vuepress-theme-vdoing）
+
+导出 `.md` 时，若文档中第一个代码块是思源笔记风格的 front matter（内容以 `---` 开头和结尾），会自动去掉代码块围栏并移到文档最顶部，作为真正的 front matter，并与自动生成的 front matter 合并：
+
+| 字段 | 来源 |
+| --- | --- |
+| `title` / `date` | 使用自动生成的值 |
+| `permalink` | 使用代码块中的值（缺失时用自动生成的） |
+| `categories` / `tags` | 合并去重 |
+| 其他字段 | 保留代码块中的原样内容（嵌套结构如 `author` 会原样保留） |
+
+例如文档开头是：
+
+````markdown
+```yaml
+---
+title: 手动标题
+permalink: /pages/manual/
+categories:
+  - 手动分类
+author:
+  name: 99u:199505
+  link: https://sundaybox.cc/
+---
+```
+````
+
+导出后 front matter 变为：
+
+````markdown
+---
+title: <文档标题>
+date: "2021-09-13 14:29:53"
+permalink: /pages/manual/
+categories:
+  - 手动分类
+  - <自动分类>
+author:
+  name: 99u:199505
+  link: https://sundaybox.cc/
+---
+````
+
 ## API 文档
 
 插件在设置里填写的 **服务器地址（baseURL）** 决定请求发往哪里：
